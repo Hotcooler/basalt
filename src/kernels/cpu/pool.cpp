@@ -443,8 +443,7 @@ void ExpertPool::run_split_multi(ExpertJobMulti* jobs, int n) {
     const auto t0 = std::chrono::steady_clock::now();
     mjobs_ = jobs;
     const int threads = active_.load(std::memory_order_relaxed) + 1;
-    const int tpt = cpu_avx512_ok() ? kTasksPerThread : kTasksPerThreadAvx2;
-    mtasks_ = tpt * threads;
+    mtasks_ = kTasksPerThread * threads;
     mrows_ = (int64_t) n * FF;
     run_phase(3, mtasks_);
     const auto t1 = std::chrono::steady_clock::now();

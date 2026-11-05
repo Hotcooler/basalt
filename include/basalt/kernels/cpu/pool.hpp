@@ -119,7 +119,7 @@ public:
     /// AVX-512 kernels move twice the data per instruction, so their rows finish sooner and the shorter tail pays;
     /// on AVX2 the longer row stream of the coarser split does.
     static constexpr int kTasksPerThread = 12;
-    static constexpr int kTasksPerThreadAvx2 = 8;   // both multi-token expert paths on AVX2
+    static constexpr int kTasksPerThreadAvx2 = 8;   // the native multi-token path on AVX2
     /// Work for the parked workers between batches (not the host thread): `fn(ctx, worker, workers, stop)` runs once
     /// per worker index and must return soon after `stop` reads true.  Returns at once.  The next batch, `idle_stop`
     /// or the destructor raises `stop`, ends the claims and waits for every claimed job to return, so the work never
