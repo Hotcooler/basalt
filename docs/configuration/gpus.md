@@ -81,9 +81,10 @@ last chunk's later layers itself.
   routed-only; with matched cards, a chunk under 4,096 tokens; a prompt that arrives while other slots decode.
 - **Three or more cards:** it runs when they all match (memory bandwidth and VRAM within 10%). On unlike cards it is off, and the
   start line prints what it would cost.
-- **Off with** `--peer-exclusive`, without the RAM copy of the experts, with a control vector, with experts other than NVFP4 (the
-  price is fitted to those), when RAM or a tier's slots are short, or when a tier card keeps under 256 MiB free beside its stage
-  (`peer-reserve-mib` sets the room).
+- **Control vector:** a loaded one is copied to every stage card, which applies it to the steered layers it reads.
+- **Off with** `--peer-exclusive`, without the RAM copy of the experts, with experts other than NVFP4 (the price is fitted to
+  those), when RAM or a tier's slots are short, or when a tier card keeps under 256 MiB free beside its stage (`peer-reserve-mib`
+  sets the room).
 - **A shorter request** that arrives during a read gets its turn at the end of the main card's current chunk.
 
 ## Two 16 GB cards
