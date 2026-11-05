@@ -44,20 +44,28 @@ std::optional<int> select_gpus(Options& o, std::vector<GpuCard>& chosen_cards, i
     for (int i : choice.cards) ri.cards.push_back((size_t) i < visible.size() ? visible[(size_t) i] : bp::GpuCard{});
     ri.max_expert_tiers = max_expert_tiers;   // the device-planned tail's peer windows
     const std::vector<bp::GpuRole> roles = bp::choose_roles(ri);
+    // an explicit layer split makes every later card a stage, not an expert tier
+    const bool split = !o.layer_split.empty();
     std::string line;
     for (size_t d = 0; d < roles.size(); ++d) {
         const bp::GpuCard& c = ri.cards[d];
         line += std::string(d ? ", " : "") + (c.name.empty() ? "GPU" : c.name) +
-                (c.smi >= 0 ? " (nvidia-smi " + std::to_string(c.smi) + ")" : "") + " " + bp::gpu_role_name(roles[d]);
-        if (roles[d] == bp::GpuRole::ExpertTier) {
+                (c.smi >= 0 ? " (nvidia-smi " + std::to_string(c.smi) + ")" : "") + " " +
+                (split && d > 0 ? "layer split stage" : bp::gpu_role_name(roles[d]));
+        if (!split && roles[d] == bp::GpuRole::ExpertTier) {
             o.peer_devices.push_back((int) d);
             o.peer_gbps.push_back(c.mem_gbps);
         }
     }
     basalt::log::info("basalt", "gpus: %s", line.c_str());
-    if (std::count(roles.begin(), roles.end(), bp::GpuRole::Idle) > 0)
+    if (!split && std::count(roles.begin(), roles.end(), bp::GpuRole::Idle) > 0)
         basalt::log::warn("basalt", "%s",
                           ("expert tiers max " + std::to_string(ri.max_expert_tiers) + "; later cards idle").c_str());
+    if (split) {
+        o.peer_devices.clear();
+        o.peer_gbps.clear();
+        o.peer_device = -1;
+    }
     if (!o.peer_devices.empty()) o.peer_device = o.peer_devices[0];
     chosen_cards = ri.cards;
     return std::nullopt;

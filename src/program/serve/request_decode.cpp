@@ -58,9 +58,11 @@ Flow Request::decode() {
     n_chain = 0;                       // drafts the last chain produced
     full_ema = 0.5;                 // how often windows are accepted whole
     pair_hint = false;                // windows are accepted whole often enough to run the chain on for a guess
+    // A sampled request's drafts are the drafter's argmax against the sampler's draw: too few rows of a window are
+    // kept for a guessed next window to pay for a miss, so only a greedy request overlaps.
     pair_req = runtime_.pipe_on && ppl == nullptr && !relax_on && gguard == nullptr && hist_n == 0 && !in_slot &&
-                          runtime_.kv_floor == 0;
-    if (runtime_.pipe_on) runtime_.mtp.set_max_drafts((pair_req ? basalt::core::kMtpChainMax : runtime_.S_mtp) - 1);
+                          runtime_.kv_floor == 0 && req_temperature <= 0.0f;
+    if (runtime_.pipe_on) runtime_.mtp.set_max_drafts(runtime_.S_mtp - 1);
     pair_runs = 0;
     pair_holds = 0;
     d0 = Clock::now();
@@ -143,7 +145,8 @@ Flow Request::decode() {
                               p + T + runtime_.S_mtp + 64 < runtime_.o.max_context;
         const std::function<int(int32_t*)> guess = [&](int32_t* wb) -> int {
             n_chain = runtime_.mtp.draft_more(n_chain, drafts.data(), dprob.data());   // made beside this window's stage 0
-            if (n_chain <= T || !basalt::core::draft_keep(dprob.data(), T - 1, kPairTheta)) return 0;
+            // a guess pays only when it holds more often than not: a miss wastes the next window's first stage
+            if (n_chain <= T || full_ema < kPairFull || !basalt::core::draft_keep(dprob.data(), T - 1, kPairTheta)) return 0;
             int tb = 1;
             while (tb < runtime_.S_mtp && T - 1 + tb < n_chain && basalt::core::draft_keep(dprob.data() + T, tb - 1, cum_adapt.th()))
                 ++tb;
@@ -496,6 +499,7 @@ Flow Request::decode() {
         } else if (will_draft && runtime_.mtp_on) {
             runtime_.mtp.set_launch_hook(after_launch);
             pair_hint = pair_req && full_ema >= kPairFull;
+            runtime_.mtp.set_max_drafts((pair_hint ? basalt::core::kMtpChainMax : runtime_.S_mtp) - 1);
             runtime_.mtp.set_cum_th(pair_hint ? cum_adapt.th() * kPairChainScale : cum_adapt.th());
             runtime_.mtp.set_host_th(cum_adapt.th());
             if (const int32_t* top = cv->top_ids())

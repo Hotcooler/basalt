@@ -160,8 +160,10 @@ snapshot is put back and K+1 is run again as without the overlap; when it holds,
 commit. Every row is computed by the same kernels on the same inputs, so greedy output is that of the plain split: the
 two builds write the same 400 tokens for conv, struct and prose and for 3-5K-token prompts when their expert caches are
 pinned (an expert on the CPU tier and the same expert on a GPU differ at 8e-8, which flips a near-tie token between
-unpinned runs). Scored (`ppl=`) requests, requests with a repetition penalty or a grammar, relaxed drafting and batch
-slots never overlap windows.
+unpinned runs). Scored (`ppl=`) requests, sampled requests (`temperature` above 0), requests with a repetition penalty
+or a grammar, relaxed drafting and batch slots never overlap windows. A greedy request's guess is launched only when the
+measured share of whole windows and the draft rule's cumulative chance make it more likely to hold than to waste the
+first card's next stage.
 
 ## Relaxed drafting
 

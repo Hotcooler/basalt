@@ -166,10 +166,20 @@ int Runtime::init_verify() {
 
 int Runtime::capture_windows() {
 
-    // every window width's graph is captured before READY, not by the first request that needs it
-    if (o.serve && stages.empty() && !ver.warm_graphs(err)) {
-        basalt::log::error("basalt serve", "capturing the verify windows failed: %s", err.c_str());
-        return 1;
+    // every window width's graph is captured before READY, not by the first request that needs it.  A layer split
+    // has one verifier per stage, on that stage's device; a pipelined pair has a second chain on each of them.
+    if (o.serve) {
+        auto warm = [&](int st, basalt::core::Verifier& v) {
+            const basalt::core::OnDevice on(st == 0 ? 0 : stages[(size_t) st - 1]->dev);
+            if (v.warm_graphs(err)) return true;
+            basalt::log::error("basalt serve", "capturing the verify windows failed: %s", err.c_str());
+            return false;
+        };
+        for (int st = 0; st < n_stages; ++st)
+            if (!warm(st, stage_ver(st))) return 1;
+        if (pipe_on)
+            for (int st = 0; st < n_stages; ++st)
+                if (!warm(st, stage_verb(st))) return 1;
     }
     // the solo windows of every slot session, so a lone request in any slot runs the solo path in place
     if (o.serve && slot0_is_solo && o.batch > 1) {

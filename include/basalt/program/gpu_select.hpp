@@ -64,8 +64,8 @@ struct RoleInputs {
 };
 
 /// The role of each card, in order: the cards after the main one are expert tiers, as many as the engine runs, and idle
-/// otherwise. The layer split (each card a block of layers) is never picked: it
-/// measured slower than the expert tier and than the main card alone (docs/configuration/gpus.md).
+/// otherwise. The layer split (each card a block of layers) is not picked here: `--layer-split` asks for it, and its
+/// cuts and stage cards are decided by that setting (docs/configuration/gpus.md).
 std::vector<GpuRole> choose_roles(const RoleInputs& in);
 
 /// One expert tier's room for experts (bytes) and its card's memory bandwidth (0: unknown, counted as equal).

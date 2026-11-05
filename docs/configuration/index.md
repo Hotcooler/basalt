@@ -120,6 +120,8 @@ Server options. Command line `--name`, config `server` block `"name"`.
 | Setting | Where | Type, values | Default | What it does and when to change it |
 | --- | --- | --- | --- | --- |
 | `gpu` | server (also `basalt`, `basalt-bench`, `basalt-probe`) | GPU numbers, e.g. `"0"` or `"0,1"`, or `"auto"` | GPU 0 alone (a warning names the other visible cards) | The cards to use, numbered as `nvidia-smi` numbers them: exactly these, the first is the main card. `auto` takes every Blackwell card and makes the fastest the main one. The engine gives the other cards their roles (a second card becomes the peer expert tier). See [GPUs](gpus.md). |
+| `layer-split` | engine | `K`, `K1,K2,..` or `auto`, with `--serve` | off (expert tier) | Run a block of layers on each card instead of an expert tier: `K` is the first layer of each later stage, `auto` searches the cuts. Faster than the expert tier for plain decode (`--spec 0`); with the drafter on the automatic choice still picks the expert tier. See [GPUs](gpus.md#running-the-layer-split). |
+| `split-device` | engine | GPU numbers, e.g. `"1"` or `"1,2"` | the cards after the main one | The later stages' cards for `layer-split`. |
 | `peer-reserve-mib` | engine | integer MiB | 600 | VRAM the second card leaves free after its experts and the buffers of its prompt share, which the engine sizes itself. Raise it when the start prints `prefill peer: the peer's buffers do not fit`. See [GPUs](gpus.md#two-16-gb-cards). |
 
 ## Context and KV cache
