@@ -91,6 +91,8 @@ std::optional<int> parse_options(int argc, char** argv, Options& o, std::string&
         }
         else if (a == "--gpu") o.gpu = next("--gpu");
         else if (a == "--gpu-plan") o.gpu_plan = true;
+        else if (a == "--layer-split") o.layer_split = next("--layer-split");
+        else if (a == "--split-device") o.split_device = next("--split-device");
         else if (a == "--vram-reserve-mib") { o.vram_reserve_mib = std::atoi(next("--vram-reserve-mib")); o.vram_reserve_given = true; }
         else if (a == "--prefill") {
             const std::string v = next("--prefill");
