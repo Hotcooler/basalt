@@ -47,21 +47,38 @@ there is no choice: nothing is priced and no other card is used or even visible 
   card once, which costs a fixed part of a window. The drafter stays on the first card and reads the last card's rows
   of each window; the last card holds the head. The experts no card holds are read from one pinned RAM copy that all
   stages share (the resident RAM mode, as in the tier), and each card's adaptive swaps stay within its own layers.
-- **Layer split of alike cards, overlapped windows**: with two cards, a server and the drafter, one conversation at a
-  time, the split also overlaps consecutive windows. Once the first card has served window K and the drafter's chain
+  Ask for it with `--layer-split K|auto` (with `--serve`); `--split-device D,..` names the later stages' cards. The
+  automatic choice still picks the expert tier, which is faster once a window carries drafted rows.
+- **Layer split of two cards, overlapped windows**: with two cards, a server, the drafter and a greedy request, the split
+  also overlaps consecutive windows. Once the first card has served window K and the drafter's chain
   holds a draft past it, the first card commits K as if every row were kept and starts window K+1 from the guess that K
-  is accepted whole, while the second card still verifies K. A guess that holds sends K+1 on to the second card at once;
-  one that fails puts the first card's state back and runs the window again, so the text is the same either way. The
-  price of the split does not count the overlap. The engine log prints `pipelined windows: N launched, M held` per
-  request.
+  is accepted whole, while the second card still verifies K. A guess is launched only when its estimated chance of
+  holding (the window accepted whole and its last pick the drafter's next token) is better than even, since a miss
+  costs the first card's next stage. A guess that holds sends K+1 on to the second card at once; one that fails puts the
+  first card's state back and runs the window again, so the text is the same either way. The price of the split does
+  not count the overlap. The engine log prints `pipelined windows: N launched, M held` per request.
 - **Tensor parallel**: every layer is split across the cards. It is priced and not built: the dense part is a third of
   a window's bytes, so splitting it saves about 2 ms between two cards and the exchanges between the cards (host-staged,
   about 5.4 us per 10 KiB) cost about as much; the expert tier already shares the experts.
 
 Only cards that match (memory bandwidth and VRAM within 10%) may pick a mechanism other than the expert tier, and only
-when it prices at least 5% below it. Unlike cards always use the expert tier. The prices are estimates fitted to
+when it prices at least 5% below it. Unlike cards always use the expert tier, and `--layer-split` runs on any selected
+cards. The prices are estimates fitted to
 measured windows (a 5090 with a 5060 Ti: tier 7.9 ms, plain layer split 13.4-13.7 ms measured at the cuts
 tried; two 5080s: 147 tok/s reported against 141 priced), good for the choice and not for forecasting a rate.
+
+### Running the layer split
+
+```sh
+basalt serve --model MODEL.basalt --gpu 0,1 --layer-split auto
+```
+
+`K` is the first layer of each later stage (`22` with two cards splits layers 0-21 and 22-47); `auto` searches every
+cut before any weight is placed and prints the one it chose. The split pays when every window is one row, as with
+`--spec 0`: the two stages then cost their layers once, and each card's expert cache covers only its own layers. With
+the drafter on, a window carries several rows and the expert tier computes both cards' experts beside them, so the
+engine keeps picking the tier unless `--layer-split` asks for the split. The first request is as fast as later ones:
+every stage's verify graphs are captured before READY. A stage that cannot capture them stops the start.
 
 ## Long prompts across the cards
 
