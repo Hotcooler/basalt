@@ -132,7 +132,7 @@ using ConvStateSizes = basalt::core::ConversationStateSizes;
 inline constexpr int kSatRatio = 2;
 /// Pipelined windows: the least chance (the cumulative draft rule's product up to the guess) a window's successor is
 /// launched on, and how far below the window threshold the chain runs on past its window so there are drafts for it.
-inline constexpr float kPairTheta = 0.50f;
+inline constexpr float kPairTheta = 0.45f;
 inline constexpr float kPairChainScale = 0.25f;
 inline constexpr double kPairFull = 0.70;   ///< the share of windows accepted whole from which the chain runs on
 
