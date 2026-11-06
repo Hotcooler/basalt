@@ -2,6 +2,7 @@
 #include "basalt/models/qwen4exp/kernels/kv_stream.hpp"
 #include "basalt/models/qwen4exp/kernels/kv_q4.hpp"
 #include "basalt/models/qwen4exp/kernels/kv_q8.hpp"
+#include "basalt/models/qwen4exp/kernels/qsa_seg.hpp"
 
 #include <cuda_runtime.h>
 
