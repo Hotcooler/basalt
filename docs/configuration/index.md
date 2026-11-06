@@ -179,7 +179,9 @@ Diagnostic flags: [diagnostics](diagnostics.md).
 ## Control vectors
 
 A GGUF control vector added to the residual stream. A request switches it with `experimental_speed_projection`. A layer split
-or a prompt split keeps it on every card: each stage applies the vector to the steered layers it reads.
+or a prompt split keeps it on every card: each stage applies the vector to the steered layers it reads. With `parallel`,
+the switch is one state for the whole batch: requests that ask for different states do not decode together, and the
+later one waits for the active ones to finish.
 
 | Setting | Where | Type, values | Default | What it does |
 | --- | --- | --- | --- | --- |

@@ -213,6 +213,36 @@ class PickSlot(unittest.TestCase):
         self.assertEqual(e.pick_slot([1, 2, 3]), 1)                 # a held prompt is never the WHOLE prompt
 
 
+class CvecGate(unittest.TestCase):
+    """A loaded control vector is one engine-wide switch, so a batch may not mix on and off."""
+
+    def engine(self, cvec="project:8-33"):
+        e = ProcessEngine("missing-executable", [], lazy=True)
+        e.info["cvec"] = cvec
+        e.slot_busy = [True, False]
+        e.slot_cvec = [True, None]
+        return e
+
+    def test_a_request_waits_for_a_different_state(self):
+        e = self.engine()
+        self.assertEqual(e._request_cvec({}), True)                  # absent: the engine's default, on
+        self.assertEqual(e._request_cvec({"experimental_speed_projection": False}), False)
+        self.assertTrue(e._cvec_compatible(True))
+        self.assertFalse(e._cvec_compatible(False))
+        e.slot_cvec[0] = False
+        self.assertFalse(e._cvec_compatible(True))
+        self.assertTrue(e._cvec_compatible(False))
+        e.slot_busy[0] = False
+        self.assertTrue(e._cvec_compatible(False))
+
+    def test_no_vector_means_no_gate(self):
+        e = self.engine("0")
+        self.assertIsNone(e._request_cvec({"experimental_speed_projection": False}))
+        self.assertTrue(e._cvec_compatible(None))
+        e.slot_cvec[0] = False
+        self.assertTrue(e._cvec_compatible(None))
+
+
 class ParallelService(unittest.TestCase):
     """The real ProcessEngine and Service over HTTP, the fake engine behind them."""
 
