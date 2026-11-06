@@ -344,6 +344,7 @@ class ProcessEngine:
         self.slot_order = list(range(self.batch))
         self.slot_q = [queue.Queue() for _ in range(self.batch)]
         self.slot_busy = [False] * self.batch
+        self.slot_cvec: list[bool | None] = [None] * self.batch
         # tokens each slot holds (for prefix reuse by a conversation's next turn) and when it was last used
         self.slot_held: list[list[int]] = [[] for _ in range(self.batch)]
         self.slot_used = [0.0] * self.batch
@@ -786,6 +787,7 @@ class ProcessEngine:
         except EngineDied:
             pass
         q, busy, held = self.slot_q[slot], self.slot_busy, self.slot_held   # restart() replaces them
+        cvec = self.slot_cvec
         tail = list(stream or [])
 
         def drain(end):             # "done" (fields) | "gone" (engine ended) | "wait" (not yet)
@@ -812,6 +814,7 @@ class ProcessEngine:
             held[slot] = tail[:-1] if stream and tail else []
             with self.slot_cv:
                 busy[slot] = False
+                cvec[slot] = None
                 self.slot_cv.notify_all()
 
         state, fields = drain(time.monotonic() + wait_s) if wait_s > 0 else ("wait", None)
@@ -931,6 +934,26 @@ class ProcessEngine:
     SOLO_AGAIN_MAX = 2      # times a request alone in a slot returns to the solo path
     SOLO_AGAIN_MIN_LEFT = 32  # ... and only with this many tokens still allowed
 
+    def _cvec_loaded(self) -> bool:
+        """Whether the engine loaded a control vector (`cvec=` in its INFO line; `0` means none)."""
+        c = str(self.info.get("cvec") or "0")
+        return c != "0" and not c.startswith("0:")
+
+    def _request_cvec(self, sampling: dict) -> bool | None:
+        """The request's control-vector state the engine will switch to; None when no vector is loaded."""
+        if not self._cvec_loaded():
+            return None
+        on = sampling.get("experimental_speed_projection")
+        return on if isinstance(on, bool) else True      # absent: the engine's default, on
+
+    def _cvec_compatible(self, want: bool | None) -> bool:
+        """Whether a request may join the active slots without changing their vector state (caller holds slot_cv).
+        The engine's switch is one flag for every slot, so states cannot be mixed in one batch window."""
+        if want is None:
+            return True
+        return all(not self.slot_busy[b] or self.slot_cvec[b] in (None, want)
+                   for b in range(len(self.slot_busy)))
+
     def _may_go_solo(self, left: int, times: int, embeddings) -> bool:
         """Whether a request alone in a slot should go back to the solo path (needs INFO slot_cache=1)."""
         if (embeddings or times >= self.SOLO_AGAIN_MAX or left < self.SOLO_AGAIN_MIN_LEFT or
@@ -956,6 +979,7 @@ class ProcessEngine:
         self.progress = None
         self._reset_windows()
         keys = self.sampling_keys(sampling or {})
+        want_cvec = self._request_cvec(sampling or {})
         out: list[int] = []
         pending: list[int] = []
         prompt, left = list(ids), int(max_new)
@@ -995,6 +1019,7 @@ class ProcessEngine:
                             alone = False
                         else:
                             self.slot_busy[solo_slot] = True
+                            self.slot_cvec[solo_slot] = want_cvec
                             reserved = solo_slot
                 if alone and left > 1:
                     if solo_slot is not None:
@@ -1025,6 +1050,7 @@ class ProcessEngine:
                                         reserved = self.pick_slot(prompt)
                                         if reserved is not None:
                                             self.slot_busy[reserved] = True
+                                            self.slot_cvec[reserved] = want_cvec
                                 if reserved is not None:    # (a solo run in a slot parks its read in that slot)
                                     self._send(f"BYIELD {reserved}")
                                     yield_sent = True
@@ -1041,6 +1067,7 @@ class ProcessEngine:
                         self._solo_kept(solo_slot, prompt, out[run0:])
                         with self.slot_cv:
                             self.slot_busy[reserved] = False
+                            self.slot_cvec[reserved] = None
                             self.slot_cv.notify_all()
                         reserved = None
                     if slot is None:
@@ -1059,8 +1086,10 @@ class ProcessEngine:
                             try:
                                 while True:
                                     slot = self.pick_slot(prompt)
-                                    if slot is not None and self.admission.may_go(ticket, self._resumes(slot, prompt)):
+                                    if (slot is not None and self._cvec_compatible(want_cvec) and
+                                            self.admission.may_go(ticket, self._resumes(slot, prompt))):
                                         self.slot_busy[slot] = True
+                                        self.slot_cvec[slot] = want_cvec
                                         break
                                     slot = None
                                     if holding:
@@ -1175,6 +1204,7 @@ class ProcessEngine:
                             self.slot_used[slot] = time.time()
                             with self.slot_cv:
                                 self.slot_busy[slot] = False
+                                self.slot_cvec[slot] = None
                                 self.slot_cv.notify_all()
                             slot, gen0 = None, None
                             prompt, left = list(ids) + out, int(max_new) - len(out)
@@ -1207,6 +1237,7 @@ class ProcessEngine:
                     self._solo_kept(solo_slot, prompt, out[run0:])
                 with self.slot_cv:
                     self.slot_busy[reserved] = False
+                    self.slot_cvec[reserved] = None
                     self.slot_cv.notify_all()
             if slot is not None:
                 self.slot_used[slot] = time.time()
@@ -1225,6 +1256,7 @@ class ProcessEngine:
                 else:
                     with self.slot_cv:
                         self.slot_busy[slot] = False
+                        self.slot_cvec[slot] = None
                         self.slot_cv.notify_all()
 
     def _solo_kept(self, slot, prompt: list[int], gen: list[int]) -> None:
